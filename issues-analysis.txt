@@ -1,0 +1,54 @@
+# Issues Analysis Document
+
+## Critical Errors (break functionality)
+
+1. Undeclared `books` (library.js:4) — leaked global; Strict Mode crash risk.
+2. Undeclared `MAX_BOOKS_PER_MEMBER` (line 7) — same global leak.
+3. `DigitalBook` missing `super()` (line 33) — ReferenceError on construct.
+4. `Member.canBorrow` uses `=` not `===` (line 61) — always assigns; logic broken.
+5. `findMemberById` uses `=` in comparison (line 202) — corrupts IDs.
+6. `searchBooksByCategory` assignment in `if` (line 116) — wrong matches + recursion.
+7. `searchBooksByCategory` no base case (line 111) — stack overflow.
+8. `processReturnQueue` missing index increment (line 106) — infinite loop.
+9. `handleFilterChange` assignment `=` (ui.js:113) — mutates categories.
+10. DOM selector `querySelector("filter-category")` missing `#` (ui.js:12) — null crash.
+11. `initializeUI()` runs before DOM ready (ui.js:226) — null elements.
+12. `localStorage.setItem` without `JSON.stringify` (ui.js:151) — stores `[object Object]`.
+13. `loadFromLocalStorage` skips `JSON.parse` (ui.js:160) — restores strings not data.
+14. `exportLibraryData` omits `JSON.stringify` (ui.js:131) — cannot serialise.
+15. Script order loads `ui.js` before `library.js` — ReferenceErrors.
+16. `Book` lacks `availableCopies`/`totalCopies` — availability unusable.
+17. `borrowBook` no null checks — throws when member/book missing.
+18. Filter event type `"click"` instead of `"change"` — unreliable UX.
+19. `handleBorrowSubmit` missing `preventDefault` — full page reload.
+20. All `var` usage — function-scoped leaks and hoisting bugs.
+
+## Major Issues by Concept
+
+**Variables/Operators:** `var` throughout; `==` in `getBooksByAuthor`; assignment-in-condition bugs; no `typeof`/null guards.
+
+**Control Flow:** Infinite while-loop; inefficient nested loops in `findOverdueBooks`; no `for-of`; broken conditionals.
+
+**Functions/FP:** Missing recursion base case; loops instead of `filter`/`reduce`/`find`; no pure/HOF patterns; fixed arity instead of rest params.
+
+**OOP:** Incomplete Book methods; DigitalBook inheritance broken; Member missing `joinDate`/info methods; PremiumMember no `canBorrow` override; LibraryStats incomplete.
+
+**Modern JS:** No destructuring, template literals, spread/rest, or ES modules.
+
+**DOM/Storage:** Selector bugs; missing listeners/delegation; broken JSON/localStorage; no DocumentFragment.
+
+**Testing:** ~3 weak tests; no setup/teardown, edge cases, coverage, or DOM/storage suites.
+
+## Missing Features
+
+Book availability APIs; Premium borrow limit (10); LibraryStats Math/for-of/destructure methods; module split (library/utils/storage/ui); 15+ Jest tests; try/catch validation; styles.css; issues + README docs.
+
+## Fix Strategy
+
+1) Freeze globals with `let`/`const`; kill `var`/`==`/assignment conditions.  
+2) Repair inheritance + class APIs.  
+3) Fix loops/recursion; replace with array methods.  
+4) Add ES modules + modern syntax.  
+5) Repair DOM events, JSON, localStorage.  
+6) Expand Jest to 15+ cases and >80% coverage.  
+7) Document errors, fixes, and evidence screenshots.
