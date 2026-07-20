@@ -3,62 +3,95 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Library Management System</title>
+    <title>Digital Library System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Digital Library System</h1>
-            <nav>
-                <button id="catalogue-tab">Catalogue</button>
-                <button id="members-tab">Members</button>
-                <button id="statistics-tab">Statistics</button>
+            <div class="brand">
+                <p class="brand-mark">Shelf &amp; Ledger</p>
+                <h1>Digital Library System</h1>
+            </div>
+            <nav aria-label="Primary">
+                <button type="button" id="catalogue-tab" class="is-active">Catalogue</button>
+                <button type="button" id="members-tab">Members</button>
+                <button type="button" id="statistics-tab">Statistics</button>
             </nav>
         </header>
-        
+
         <main>
             <section id="catalogue-section">
-                <div class="controls">
-                    <input type="text" id="search" placeholder="Search books...">
-                    <select id="filter-category">
-                        <option value="all">All Categories</option>
-                        <option value="fiction">Fiction</option>
-                        <option value="non-fiction">Non-Fiction</option>
-                        <option value="reference">Reference</option>
-                    </select>
+                <div class="panel controls-panel">
+                    <div class="controls">
+                        <input type="text" id="search" placeholder="Search books by title..." aria-label="Search books">
+                        <select id="filter-category" aria-label="Filter by category">
+                            <option value="all">All Categories</option>
+                            <option value="fiction">Fiction</option>
+                            <option value="non-fiction">Non-Fiction</option>
+                            <option value="reference">Reference</option>
+                        </select>
+                        <button type="button" id="save-data">Save</button>
+                        <button type="button" id="export-data">Export</button>
+                        <button type="button" id="import-data">Import</button>
+                        <button type="button" id="reset-demo" class="btn-secondary">Reset demo</button>
+                    </div>
                 </div>
-                
+
                 <div id="catalogue-list" class="book-grid">
                     <!-- Books rendered here -->
                 </div>
-                
-                <div id="book-details">
-                    <!-- Selected book details -->
+
+                <div id="book-details" class="panel details-panel" aria-live="polite">
+                    <p class="empty-state">Select a book card to view details.</p>
                 </div>
+
+                <details class="panel advanced-panel">
+                    <summary>Advanced: JSON import / export</summary>
+                    <label for="data-output" class="sr-only">JSON data</label>
+                    <textarea id="data-output" rows="4" placeholder="Exported JSON appears here — paste JSON to import"></textarea>
+                </details>
             </section>
-            
-            <section id="borrow-section">
+
+            <section id="borrow-section" class="panel">
                 <h2>Borrow a Book</h2>
-                <form id="borrow-form">
-                    <input type="text" id="member-id" placeholder="Member ID" required>
-                    <input type="text" id="isbn" placeholder="ISBN" required>
+                <p class="section-lead">Choose a member and title, then confirm the loan.</p>
+                <form id="borrow-form" class="borrow-form">
+                    <label for="member-id">Member</label>
+                    <select id="member-id" required>
+                        <option value="">Select member…</option>
+                    </select>
+                    <label for="isbn">Book</label>
+                    <select id="isbn" required>
+                        <option value="">Select book…</option>
+                    </select>
                     <button type="submit">Borrow Book</button>
                 </form>
             </section>
-            
-            <section id="member-section" style="display: none;">
-                <h2>Member Management</h2>
-                <div id="member-form">
-                    <!-- Member form rendered here -->
+
+            <section id="member-section" class="panel" style="display: none;">
+                <div class="section-header">
+                    <div>
+                        <h2>Member Management</h2>
+                        <p class="section-lead">Add, edit, or remove library accounts.</p>
+                    </div>
                 </div>
-                <div id="member-list">
-                    <!-- Members list -->
+                <div class="member-layout">
+                    <div id="member-form">
+                        <!-- Member form rendered here -->
+                    </div>
+                    <div id="member-list">
+                        <!-- Members list -->
+                    </div>
                 </div>
             </section>
-            
-            <section id="statistics-section" style="display: none;">
+
+            <section id="statistics-section" class="panel" style="display: none;">
                 <h2>Library Statistics</h2>
+                <p class="section-lead">Live snapshot of catalogue activity.</p>
                 <div class="stats-grid">
                     <div class="stat-card">
                         <h3>Total Books</h3>
@@ -76,10 +109,7 @@
             </section>
         </main>
     </div>
-    
-    <!-- Scripts in wrong order -->
-    <script src="ui.js"></script>
-    <script src="library.js"></script>
-    <!-- Missing: modules setup -->
+
+    <script type="module" src="src/ui.js"></script>
 </body>
 </html>

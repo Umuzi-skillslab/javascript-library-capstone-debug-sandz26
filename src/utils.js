@@ -82,3 +82,32 @@ export function splitFirstTitle(titles) {
 export function formatStatLabel({ label, value }) {
   return `${label}: ${value}`;
 }
+
+/**
+ * Human-readable membership tenure for UI display.
+ * @param {number} days
+ * @returns {string}
+ */
+export function formatMembershipTenure(days) {
+  if (typeof days !== 'number' || Number.isNaN(days) || days < 0) {
+    return 'Unknown';
+  }
+  if (days === 0) {
+    return 'Joined today';
+  }
+  if (days === 1) {
+    return '1 day';
+  }
+  if (days < 30) {
+    return `${days} days`;
+  }
+  if (days < 60) {
+    return 'About 1 month';
+  }
+  const months = Math.floor(days / 30);
+  if (months < 12) {
+    return `About ${months} months`;
+  }
+  const years = Math.floor(days / 365);
+  return years === 1 ? 'About 1 year' : `About ${years} years`;
+}

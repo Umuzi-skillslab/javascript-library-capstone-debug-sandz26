@@ -84,7 +84,41 @@ export function reviveBook(data) {
   }
 
   book.checkedOut = Array.isArray(data.checkedOut) ? data.checkedOut : [];
+  book.coverUrl = data.coverUrl || getCoverUrl(book.isbn, book.category);
   return book;
+}
+
+/**
+ * Real Open Library covers keyed by ISBN — matches the seeded catalogue titles.
+ * Source: https://covers.openlibrary.org
+ */
+const DEMO_COVERS = {
+  '9780451524935': 'https://covers.openlibrary.org/b/isbn/9780451524935-L.jpg',
+  '9780062316097': 'https://covers.openlibrary.org/b/isbn/9780062316097-L.jpg',
+  '9780205309023': 'https://covers.openlibrary.org/b/isbn/9780205309023-L.jpg',
+  '9780735211292': 'https://covers.openlibrary.org/b/isbn/9780735211292-L.jpg',
+  '9780547928227': 'https://covers.openlibrary.org/b/isbn/9780547928227-L.jpg'
+};
+
+const CATEGORY_COVERS = {
+  fiction: 'https://covers.openlibrary.org/b/isbn/9780141439518-L.jpg',
+  'non-fiction': 'https://covers.openlibrary.org/b/isbn/9780553380163-L.jpg',
+  reference: 'https://covers.openlibrary.org/b/isbn/9780198611868-L.jpg'
+};
+
+/** Resolve a cover URL for a book ISBN / category. */
+export function getCoverUrl(isbn, category = 'fiction') {
+  if (DEMO_COVERS[isbn]) {
+    return DEMO_COVERS[isbn];
+  }
+
+  // Prefer Open Library for real ISBN-10 / ISBN-13 values
+  const cleanIsbn = String(isbn ?? '').replace(/[^0-9Xx]/g, '');
+  if (cleanIsbn.length === 10 || cleanIsbn.length === 13) {
+    return `https://covers.openlibrary.org/b/isbn/${cleanIsbn}-L.jpg`;
+  }
+
+  return CATEGORY_COVERS[category] || CATEGORY_COVERS.fiction;
 }
 
 /**
@@ -117,7 +151,7 @@ export function reviveMember(data) {
  * Physical book with copy tracking and checkout history.
  */
 export class Book {
-  constructor(isbn, title, author, year, copies = 1, category = 'fiction') {
+  constructor(isbn, title, author, year, copies = 1, category = 'fiction', coverUrl = '') {
     if (typeof isbn !== 'string' || !isbn.trim()) {
       throw new TypeError('isbn must be a non-empty string');
     }
@@ -142,6 +176,7 @@ export class Book {
     this.availableCopies = copies;
     this.totalCopies = copies;
     this.checkedOut = [];
+    this.coverUrl = coverUrl || getCoverUrl(isbn, category);
   }
 
   /** Returns true when at least one physical copy can be borrowed. */
@@ -198,9 +233,9 @@ export class Book {
  * Digital book — inherits Book and tracks downloads instead of physical stock.
  */
 export class DigitalBook extends Book {
-  constructor(isbn, title, author, year, fileSize, format, category = 'fiction') {
+  constructor(isbn, title, author, year, fileSize, format, category = 'fiction', coverUrl = '') {
     // Physical copy counts stay at 1 for stats; availability is always open digitally.
-    super(isbn, title, author, year, 1, category);
+    super(isbn, title, author, year, 1, category, coverUrl);
     this.fileSize = fileSize;
     this.format = format;
     this.downloads = 0;
@@ -618,15 +653,112 @@ export function filterBooksByCategory(category) {
   return books.filter((book) => book.category === category);
 }
 
+/** Next numeric member id based on existing registry. */
+export function getNextMemberId() {
+  if (members.length === 0) {
+    return 1;
+  }
+  const ids = members.map((member) => Number(member.id)).filter((id) => !Number.isNaN(id));
+  return ids.length === 0 ? 1 : Math.max(...ids) + 1;
+}
+
+/**
+ * Register a new member (standard or premium).
+ * @returns {Member}
+ */
+export function addMember(name, email, membershipType = 'standard') {
+  if (!isNonEmptyString(name)) {
+    throw new TypeError('name must be a non-empty string');
+  }
+  if (typeof email !== 'string' || !email.includes('@')) {
+    throw new TypeError('email must be a valid email string');
+  }
+
+  const id = getNextMemberId();
+  const member = membershipType === 'premium'
+    ? new PremiumMember(id, name.trim(), email.trim())
+    : new Member(id, name.trim(), email.trim(), 'standard');
+
+  members.push(member);
+  LibraryStats.updateStats();
+  return member;
+}
+
+/**
+ * Update an existing member. Recreates Premium/Standard when type changes.
+ * @returns {Member|null}
+ */
+export function editMember(id, updates = {}) {
+  const index = members.findIndex((member) => member.id === id);
+  if (index === -1) {
+    return null;
+  }
+
+  const current = members[index];
+  const {
+    name = current.name,
+    email = current.email,
+    membershipType = current.membershipType
+  } = updates;
+
+  if (!isNonEmptyString(name) || typeof email !== 'string') {
+    throw new TypeError('name and email are required');
+  }
+
+  let nextMember = current;
+  if (membershipType !== current.membershipType) {
+    nextMember = membershipType === 'premium'
+      ? new PremiumMember(current.id, name.trim(), email.trim())
+      : new Member(current.id, name.trim(), email.trim(), 'standard');
+    nextMember.borrowedBooks = [...current.borrowedBooks];
+    nextMember.overdueBooks = [...(current.overdueBooks || [])];
+    nextMember.joinDate = current.joinDate;
+    members[index] = nextMember;
+  } else {
+    updateMemberInfo(current, { name: name.trim(), email: email.trim(), membershipType });
+    nextMember = current;
+  }
+
+  LibraryStats.updateStats();
+  return nextMember;
+}
+
+/**
+ * Remove a member by id.
+ * @returns {boolean}
+ */
+export function deleteMember(id) {
+  const index = members.findIndex((member) => member.id === id);
+  if (index === -1) {
+    return false;
+  }
+  members.splice(index, 1);
+  LibraryStats.updateStats();
+  return true;
+}
+
+/** Ensure loaded books always have a cover URL (migrates older localStorage data). */
+export function ensureBookCovers() {
+  for (const book of books) {
+    // Refresh known demo ISBNs / missing covers so titles stay matched to artwork
+    if (!book.coverUrl || DEMO_COVERS[book.isbn]) {
+      book.coverUrl = getCoverUrl(book.isbn, book.category);
+    }
+  }
+}
+
 /** Seed demo catalogue and members for the UI. */
 export function seedDemoData() {
   clearLibrary();
 
+  // Real titles + real ISBNs so Open Library can serve matching cover art.
+  // Still covers fiction / non-fiction / reference + one DigitalBook (project requirements).
   const demoBooks = [
-    new Book('978-0-123', 'The Silent Library', 'Ada Voss', 2019, 3, 'fiction'),
-    new Book('978-0-456', 'Data Structures Deep Dive', 'Ken Park', 2021, 2, 'non-fiction'),
-    new Book('978-0-789', 'Encyclopaedia of Rivers', 'Mira Cole', 2015, 1, 'reference'),
-    new DigitalBook('978-1-001', 'Cloud Patterns', 'Rina Sol', 2023, 12, 'epub', 'non-fiction')
+    new Book('9780451524935', '1984', 'George Orwell', 1949, 3, 'fiction', DEMO_COVERS['9780451524935']),
+    new Book('9780062316097', 'Sapiens', 'Yuval Noah Harari', 2015, 2, 'non-fiction', DEMO_COVERS['9780062316097']),
+    new Book('9780205309023', 'The Elements of Style', 'William Strunk Jr.', 1999, 1, 'reference', DEMO_COVERS['9780205309023']),
+    new Book('9780547928227', 'The Hobbit', 'J.R.R. Tolkien', 1937, 2, 'fiction', DEMO_COVERS['9780547928227']),
+    new DigitalBook('9780735211292', 'Atomic Habits', 'James Clear', 2018, 8, 'epub', 'non-fiction', DEMO_COVERS['9780735211292'])
   ];
 
   const demoMembers = [

@@ -35,7 +35,10 @@ import {
   filterBooksByCategory,
   seedDemoData,
   MAX_BOOKS_PER_MEMBER,
-  MAX_BOOKS_PREMIUM
+  MAX_BOOKS_PREMIUM,
+  addMember,
+  editMember,
+  deleteMember
 } from '../src/library.js';
 import {
   calculateFineAmount,
@@ -43,7 +46,8 @@ import {
   mergeUniqueIsbns,
   splitFirstTitle,
   formatStatLabel,
-  isNonEmptyString
+  isNonEmptyString,
+  formatMembershipTenure
 } from '../src/utils.js';
 import {
   exportLibraryData,
@@ -64,7 +68,9 @@ import {
   handleExportClick,
   handleImportClick,
   createMemberForm,
-  loadCatalogue
+  loadCatalogue,
+  renderMemberList,
+  handleMemberListClick
 } from '../src/ui.js';
 
 beforeEach(() => {
@@ -319,6 +325,13 @@ describe('String Operations', () => {
     expect(isNonEmptyString('ok')).toBe(true);
     expect(isNonEmptyString('  ')).toBe(false);
   });
+
+  test('formatMembershipTenure uses friendly labels', () => {
+    expect(formatMembershipTenure(0)).toBe('Joined today');
+    expect(formatMembershipTenure(1)).toBe('1 day');
+    expect(formatMembershipTenure(12)).toBe('12 days');
+    expect(formatMembershipTenure(45)).toBe('About 1 month');
+  });
 });
 
 describe('Math Operations', () => {
@@ -467,10 +480,10 @@ describe('DOM Manipulation', () => {
       preventDefault: jest.fn(),
       target: document.getElementById('borrow-form')
     };
-    window.alert = jest.fn();
     handleBorrowSubmit(event);
     expect(event.preventDefault).toHaveBeenCalled();
     expect(findMemberById(1).borrowedBooks).toContain('978-0');
+    expect(document.getElementById('app-toast').textContent).toContain('borrowed');
   });
 
   test('handleBorrowSubmit validates empty inputs', () => {
@@ -478,13 +491,12 @@ describe('DOM Manipulation', () => {
     initializeUI();
     document.getElementById('member-id').value = '';
     document.getElementById('isbn').value = '';
-    window.alert = jest.fn();
     const event = {
       preventDefault: jest.fn(),
       target: document.getElementById('borrow-form')
     };
     handleBorrowSubmit(event);
-    expect(window.alert).toHaveBeenCalled();
+    expect(document.getElementById('app-toast').textContent).toMatch(/required/i);
   });
 
   test('handleBorrowSubmit reports failure when borrow is impossible', () => {
@@ -494,14 +506,11 @@ describe('DOM Manipulation', () => {
     initializeUI();
     document.getElementById('member-id').value = '1';
     document.getElementById('isbn').value = '978-x';
-    window.alert = jest.fn();
     handleBorrowSubmit({
       preventDefault: jest.fn(),
       target: document.getElementById('borrow-form')
     });
-    expect(window.alert).toHaveBeenCalledWith(
-      expect.stringContaining('Unable to borrow')
-    );
+    expect(document.getElementById('app-toast').textContent).toContain('Unable to borrow');
   });
 
   test('handleBookClick delegation shows details', () => {
@@ -563,39 +572,35 @@ describe('DOM Manipulation', () => {
     initializeUI();
     handleExportClick();
     expect(document.getElementById('data-output').value).toContain('"books"');
-    window.alert = jest.fn();
     handleImportClick();
-    expect(window.alert).toHaveBeenCalledWith('Library data imported');
+    expect(document.getElementById('app-toast').textContent).toContain('imported');
   });
 
   test('handleImportClick alerts on empty JSON area', () => {
     initializeUI();
     document.getElementById('data-output').value = '';
-    window.alert = jest.fn();
     handleImportClick();
-    expect(window.alert).toHaveBeenCalledWith(
-      expect.stringContaining('Paste JSON')
-    );
+    expect(document.getElementById('app-toast').textContent).toContain('Paste JSON');
   });
 
   test('handleImportClick alerts on invalid JSON', () => {
     initializeUI();
     document.getElementById('data-output').value = '{bad';
-    window.alert = jest.fn();
     handleImportClick();
-    expect(window.alert).toHaveBeenCalledWith(
-      expect.stringContaining('Import failed')
-    );
+    expect(document.getElementById('app-toast').textContent).toContain('Import failed');
   });
 
-  test('createMemberForm renders fields and prevents default submit', () => {
+  test('createMemberForm renders fields and can add a member', () => {
     initializeUI();
     createMemberForm();
     const form = document.getElementById('add-member-form');
     expect(form).not.toBeNull();
-    window.alert = jest.fn();
+    document.getElementById('name').value = 'New Reader';
+    document.getElementById('email').value = 'reader@example.com';
+    document.getElementById('membership-type').value = 'premium';
     form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-    expect(window.alert).toHaveBeenCalled();
+    expect(members.some((member) => member.name === 'New Reader')).toBe(true);
+    expect(document.getElementById('app-toast').textContent).toContain('Member added');
   });
 
   test('renderBookCatalogue shows empty state', () => {
@@ -618,6 +623,41 @@ describe('DOM Manipulation', () => {
     initializeUI();
     expect(spy).toHaveBeenCalled();
     spy.mockRestore();
+  });
+});
+
+describe('Member CRUD', () => {
+  test('addMember creates standard and premium accounts', () => {
+    const standard = addMember('Std', 'std@example.com', 'standard');
+    const premium = addMember('Prem', 'prem@example.com', 'premium');
+    expect(standard).toBeInstanceOf(Member);
+    expect(premium).toBeInstanceOf(PremiumMember);
+    expect(members).toHaveLength(2);
+  });
+
+  test('editMember updates fields and can switch membership type', () => {
+    const member = addMember('Old', 'old@example.com', 'standard');
+    const updated = editMember(member.id, {
+      name: 'New',
+      email: 'new@example.com',
+      membershipType: 'premium'
+    });
+    expect(updated.name).toBe('New');
+    expect(updated).toBeInstanceOf(PremiumMember);
+  });
+
+  test('deleteMember removes a member and UI edit/delete work', () => {
+    const member = addMember('Gone', 'gone@example.com', 'standard');
+    initializeUI();
+    renderMemberList();
+    expect(document.querySelector(`[data-member-id="${member.id}"]`)).not.toBeNull();
+
+    window.confirm = jest.fn(() => true);
+    handleMemberListClick({
+      target: document.querySelector(`button[data-action="delete"][data-member-id="${member.id}"]`)
+    });
+    expect(deleteMember(member.id)).toBe(false);
+    expect(members.find((item) => item.id === member.id)).toBeUndefined();
   });
 });
 
